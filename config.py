@@ -92,7 +92,7 @@ class Config:
     
     # === 定时任务配置 ===
     schedule_enabled: bool = False            # 是否启用定时任务
-    schedule_time: str = "09:00,11:30,13:00,18:00"              # 执行时间（HH:MM,HH:MM 格式）
+    schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     
     # === 流控配置（防封禁关键参数）===

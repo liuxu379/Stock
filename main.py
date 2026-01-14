@@ -575,8 +575,20 @@ class StockAnalysisPipeline:
             filepath = self.notifier.save_report_to_file(report)
             logger.info(f"决策仪表盘日报已保存: {filepath}")
             
-            # 不再直接在这里推送通知，改为在 run_full_analysis 中推送飞书文档链接
-            logger.info("个股分析完成，等待汇总推送")
+            # 推送通知
+            if self.notifier.is_available():
+                # 生成精简版决策仪表盘用于推送
+                dashboard_content = self.notifier.generate_wechat_dashboard(results)
+                logger.info(f"决策仪表盘长度: {len(dashboard_content)} 字符")
+                logger.debug(f"推送内容:\n{dashboard_content}")
+                
+                success = self.notifier.send(dashboard_content)
+                if success:
+                    logger.info("决策仪表盘推送成功")
+                else:
+                    logger.warning("决策仪表盘推送失败")
+            else:
+                logger.info("通知渠道未配置，跳过推送")
                 
         except Exception as e:
             logger.error(f"发送通知失败: {e}")
@@ -675,8 +687,17 @@ def run_market_review(notifier: NotificationService, analyzer=None, search_servi
         review_report = market_analyzer.run_daily_review()
         
         if review_report:
-            # 不再在这里推送通知，改为汇总后推送飞书文档链接
-            logger.info("大盘复盘完成，等待汇总推送")
+            # 推送通知
+            if notifier.is_available():
+                # 添加标题
+                report_content = f"🎯 大盘复盘\n\n{review_report}"
+                
+                success = notifier.send(report_content)
+                if success:
+                    logger.info("大盘复盘推送成功")
+                else:
+                    logger.warning("大盘复盘推送失败")
+            
             return review_report
         
     except Exception as e:
@@ -757,16 +778,12 @@ def run_full_analysis(
                     dashboard_content = pipeline.notifier.generate_dashboard_report(results)
                     full_content += f"# 🚀 个股决策仪表盘\n\n{dashboard_content}"
 
-                # 2.5 使用 Gemini 转换为飞书适配格式
-                logger.info("正在调用 Gemini 转换为飞书适配 Markdown 格式...")
-                feishu_compatible_content = pipeline.analyzer.convert_to_feishu_markdown(full_content)
-
                 # 3. 创建文档
-                doc_url = feishu_doc.create_daily_doc(doc_title, feishu_compatible_content)
+                doc_url = feishu_doc.create_daily_doc(doc_title, full_content)
                 if doc_url:
                     logger.info(f"飞书云文档创建成功: {doc_url}")
-                    # 推送文档链接到所有渠道
-                    pipeline.notifier.send(f"📊 [{now.strftime('%H:%M')}] 复盘报告已生成\n\n🔗 飞书文档: {doc_url}")
+                    # 可选：将文档链接也推送到群里
+                    pipeline.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
 
         except Exception as e:
             logger.error(f"飞书文档生成失败: {e}")
