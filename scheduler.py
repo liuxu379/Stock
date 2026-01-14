@@ -68,7 +68,7 @@ class Scheduler:
         初始化调度器
         
         Args:
-            schedule_time: 每日执行时间，格式 "HH:MM"
+            schedule_time: 执行时间，支持逗号分隔的多个时间，格式 "HH:MM,HH:MM"
         """
         try:
             import schedule
@@ -77,14 +77,19 @@ class Scheduler:
             logger.error("schedule 库未安装，请执行: pip install schedule")
             raise ImportError("请安装 schedule 库: pip install schedule")
         
-        self.schedule_time = schedule_time
+        # 处理多个时间点
+        if isinstance(schedule_time, str):
+            self.schedule_times = [t.strip() for t in schedule_time.split(',') if t.strip()]
+        else:
+            self.schedule_times = ["18:00"]
+            
         self.shutdown_handler = GracefulShutdown()
         self._task_callback: Optional[Callable] = None
         self._running = False
         
     def set_daily_task(self, task: Callable, run_immediately: bool = True):
         """
-        设置每日定时任务
+        设置定时任务（仅限周一至周五）
         
         Args:
             task: 要执行的任务函数（无参数）
@@ -92,9 +97,14 @@ class Scheduler:
         """
         self._task_callback = task
         
-        # 设置每日定时任务
-        self.schedule.every().day.at(self.schedule_time).do(self._safe_run_task)
-        logger.info(f"已设置每日定时任务，执行时间: {self.schedule_time}")
+        # 设置定时任务（周一至周五）
+        for t in self.schedule_times:
+            self.schedule.every().monday.at(t).do(self._safe_run_task)
+            self.schedule.every().tuesday.at(t).do(self._safe_run_task)
+            self.schedule.every().wednesday.at(t).do(self._safe_run_task)
+            self.schedule.every().thursday.at(t).do(self._safe_run_task)
+            self.schedule.every().friday.at(t).do(self._safe_run_task)
+            logger.info(f"已设置定时任务，执行时间: 每周一至周五 {t}")
         
         if run_immediately:
             logger.info("立即执行一次任务...")

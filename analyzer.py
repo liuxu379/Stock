@@ -382,6 +382,30 @@ class GeminiAnalyzer:
 4. **检查清单可视化**：用 ✅⚠️❌ 明确显示每项检查结果
 5. **风险优先级**：舆情中的风险点要醒目标出"""
 
+    # ========================================
+    # 系统提示词 - 飞书 Markdown 转换器
+    # ========================================
+    FEISHU_MD_PROMPT = """你是一位专业的文档排版专家，擅长将普通 Markdown 转换为飞书文档（Docx）高度兼容的 Markdown 格式。
+
+## 转换目标
+你的任务是将输入的股票分析报告（Markdown 格式）转换为飞书文档能够完美识别和呈现的格式。
+
+## 飞书文档（Docx）Markdown 适配规则
+1. **标题**：严格使用 #, ##, ### 表示 H1, H2, H3。
+2. **列表**：使用标准 - 或 1. 列表。
+3. **加粗**：使用 **粗体**。
+4. **分割线**：使用 ---。
+5. **表情符号**：保留并适当优化所有的 Emoji，增加可读性。
+6. **表格**：飞书文档对 Markdown 表格支持有限，请将表格转换为易读的【列表格式】或【卡片格式】。
+7. **重点突出**：重要的结论、价格、操作建议请加粗。
+8. **移除干扰**：移除所有 HTML 标签、多余的代码块标记。
+9. **结构优化**：确保段落清晰，层次分明。
+
+## 注意事项
+- 保持原始信息准确无误，不要修改任何数据（如价格、评分、建议）。
+- 输出应该是纯粹的 Markdown 文本，不要包含在任何代码块（如 ```markdown）中。
+- 确保输出内容美观、专业、易于在移动端和 PC 端阅读。"""
+
     def __init__(self, api_key: Optional[str] = None):
         """
         初始化 AI 分析器
@@ -677,6 +701,53 @@ class GeminiAnalyzer:
         # 所有方式都失败
         raise last_error or Exception("所有 AI API 调用失败，已达最大重试次数")
     
+    def convert_to_feishu_markdown(self, content: str) -> str:
+        """
+        使用 Gemini 将普通 Markdown 转换为飞书适配格式
+        
+        Args:
+            content: 原始 Markdown 内容
+            
+        Returns:
+            飞书适配后的 Markdown 内容
+        """
+        if not self.is_available():
+            logger.warning("AI 分析器不可用，返回原始内容")
+            return content
+            
+        try:
+            logger.info("正在使用 Gemini 转换飞书格式...")
+            
+            # 使用飞书专用的系统提示词
+            prompt = f"请将以下内容转换为飞书文档适配的 Markdown 格式：\n\n{content}"
+            
+            # 如果是 Gemini 模型，可以临时更改 system_instruction
+            # 但为了简单起见，我们直接在 prompt 中强调
+            full_prompt = f"{self.FEISHU_MD_PROMPT}\n\n{prompt}"
+            
+            generation_config = {
+                "temperature": 0.3, # 降低随机性，保证格式稳定
+                "max_output_tokens": 8192,
+            }
+            
+            response_text = self._call_api_with_retry(full_prompt, generation_config)
+            
+            # 清理可能的 markdown 代码块包装
+            if response_text.startswith("```markdown"):
+                response_text = response_text.replace("```markdown", "", 1)
+                if response_text.endswith("```"):
+                    response_text = response_text.rsplit("```", 1)[0]
+            elif response_text.startswith("```"):
+                response_text = response_text.replace("```", "", 1)
+                if response_text.endswith("```"):
+                    response_text = response_text.rsplit("```", 1)[0]
+                    
+            return response_text.strip()
+            
+        except Exception as e:
+            logger.error(f"转换飞书格式失败: {e}")
+            return content
+
     def analyze(
         self, 
         context: Dict[str, Any],
